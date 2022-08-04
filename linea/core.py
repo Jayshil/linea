@@ -35,7 +35,10 @@ attrs = [  # These vectors are from DRP
 ] + [  # These vectors are from PIPE
     "u0",
     "u1",
-    "u2"
+    "u2",
+    "xc",
+    "yc",
+    "bg"
 ]
 
 
