@@ -250,7 +250,7 @@ class CheopsLightCurve(object):
             plt.xlabel('BJD')
             plt.ylabel('Flux')
 
-    def regress(self, design_matrix):
+    def regress(self, design_matrix, log_lams):
         r"""
         Regress the design matrix against the fluxes.
 
@@ -269,7 +269,7 @@ class CheopsLightCurve(object):
         """
         b, c = linreg(design_matrix,
                       self.flux[~self.mask],
-                      self.fluxerr[~self.mask])
+                      self.fluxerr[~self.mask], log_lams)
 
         return RegressionResult(design_matrix, b, c)
 
