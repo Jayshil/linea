@@ -237,13 +237,34 @@ class CheopsLightCurve(object):
         maxiters : float or None
             Number of sigma-clipping iterations. Default is None, which repeats
             until there are no outliers left.
-        plot : float
+        plot : bool
             Plot the accepted fluxes (in black) and the rejected fluxes (in red)
         """
         sc = SigmaClip(sigma_upper=sigma_upper, sigma_lower=sigma_lower,
                        stdfunc=mad_std, maxiters=maxiters)
         self.mask[~self.mask] |= sc(self.flux[~self.mask]).mask
 
+        if plot:
+            plt.plot(self.bjd_time[self.mask], self.flux[self.mask], 'r.')
+            plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
+            plt.xlabel('BJD')
+            plt.ylabel('Flux')
+    
+    def high_bg_clip(self, bgmin=300, plot=False):
+        """
+        To mask the points with high background (mainly used for PIPE data)
+
+        Parameters
+        ----------
+        bgmin : float
+            Minimum threshold value of background, all points that have background
+            above this value would be masked.
+        plot : bool
+            Plot the accepted fluxes (in black) and the rejected fluxes (in red)
+        """
+        msk = (self.bg > bgmin)
+        self.mask |= msk
+        
         if plot:
             plt.plot(self.bjd_time[self.mask], self.flux[self.mask], 'r.')
             plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
