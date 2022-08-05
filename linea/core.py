@@ -9,7 +9,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.stats import SigmaClip, mad_std
 
-from linalg import linreg, RegressionResult
+from .linalg import linreg, RegressionResult
 
 __all__ = ['CheopsLightCurve', 'JointLightCurve']
 
@@ -270,6 +270,47 @@ class CheopsLightCurve(object):
             plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
             plt.xlabel('BJD')
             plt.ylabel('Flux')
+    
+    def mask_planetary_signal(self, pl, plot=False):
+        """
+        To mask the points with planetary signal (transit/eclipse)
+
+        Parameters
+        ----------
+        pl : Planet object
+        plot : bool
+            Plot the accepted fluxes (in black) and the rejected fluxes (in red)
+        """
+        # Planetary parameters
+        per1 = pl.per
+        ar1 = pl.a
+        inc1 = np.deg2rad(pl.inc)
+        rprs1 = pl.rp
+        t01 = pl.t0             # Transit time
+        t02 = pl.t0 + (per1/2)  # Eclipse time
+        bb = ar1*np.cos(inc1)
+        # Computing transit/eclipse duration
+        ab = per1/np.pi
+        cd = (1+rprs1)**2 - bb**2
+        ef = 1 - ((bb/ar1)**2)
+        br1 = (1/ar1)*(np.sqrt(cd/ef))
+        t14 = ab*np.arcsin(br1)
+        # Computing phase
+        phs1 = ((self.bjd_time - t01)/per1) % 1        # Courtesy of `juliet`
+        ii1 = np.where(phs1>0.5)[0]
+        phs1[ii1] = phs1[ii1] - 1.
+        phs2 = ((self.bjd_time - t02)/per1) % 1
+        ii2 = np.where(phs2>0.5)[0]
+        phs2[ii2] = phs2[ii2] - 1.
+        # And producing the mask
+        msk2 = (np.abs(phs1*per1)>=t14)&(np.abs(phs2*per1)>=t14)
+        self.mask |= ~msk2
+        if plot:
+            plt.plot(self.bjd_time[self.mask], self.flux[self.mask], 'r.')
+            plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
+            plt.xlabel('BJD')
+            plt.ylabel('Flux')
+
 
     def regress(self, design_matrix, log_lams=None):
         r"""
