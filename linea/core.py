@@ -188,6 +188,82 @@ class CheopsLightCurve(object):
             ]).T
 
         return X[~self.mask]
+    
+    def design_matrix_all(self, harmonics, norm=True):
+        """
+        Generate a design matrix that contains all possible detrending vectors
+
+        Parameters:
+        -----------
+        harmonics : int
+            Number of roll angle sinusoidal harmonics to be included
+        norm : bool
+            Normalize the column vectors within the design matrix such that they
+            have mean=zero and range=unity.
+
+        Returns
+        -------
+        X : `~numpy.ndarray`
+            Design matrix (concatenated column vectors of observables)
+        names : list
+            List of names of each column
+        """
+        X = np.ones(len(self.bjd_time))
+        self.name_detrend = ['ones']
+        # Roll angle harmonics
+        for i in range(harmonics):
+            if norm:
+                sin1 = normalize(np.sin((i+1)*np.radians(self.roll_angle)))
+                cos1 = normalize(np.cos((i+1)*np.radians(self.roll_angle)))
+            else:
+                sin1 = np.sin((i+1)*np.radians(self.roll_angle))
+                cos1 = np.cos((i+1)*np.radians(self.roll_angle))
+            X = np.vstack([X, sin1])
+            X = np.vstack([X, cos1])
+            self.name_detrend.append('sin' + str(i+1))
+            self.name_detrend.append('cos' + str(i+1))
+        # Centroid positions, background
+        try:
+            xc, yc, bg = self.centroid_x, self.centroid_y, self.background
+        except:
+            xc, yc, bg = self.xc, self.yc, self.bg
+        if norm:
+            X = np.vstack([
+                X, normalize(xc), normalize(yc), normalize(xc**2), normalize(yc**2), normalize(xc*yc), normalize(bg)
+            ])
+        else:
+            X = np.vstack([
+                X, xc, yc, xc**2, yc**2, xc*yc, bg
+            ])
+        self.name_detrend = self.name_detrend + ['xc', 'yc', 'x2', 'y2', 'xy', 'bg']
+        # Contamination, smear for DRP; u1, u2 for PIPE
+        try:
+            if norm:
+                X = np.vstack([X, normalize(self.conta_lc), normalize(self.smearing_lc)])
+            else:
+                X = np.vstack([X, self.conta_lc, self.smearing_lc])
+            self.name_detrend = self.name_detrend + ['contamination', 'smearing']
+        except:
+            pass
+        try:
+            if norm:
+                X = np.vstack([X, normalize(self.u1), normalize(self.u2)])
+            else:
+                X = np.vstack([X, self.u1, self.u2])
+            self.name_detrend = self.name_detrend + ['u1', 'u2']
+        except:
+            pass
+        X = X.T
+        # Other extra basis vectors
+        if self.extra_basis_vectors is not None:
+            X = np.vstack([
+                X.T, self.extra_basis_vectors,
+            ]).T
+            for i in range(len(self.extra_basis_vectors[:,0])):
+                self.name_detrend.append('extra' + str(i+1))
+
+        return X[~self.mask]
+        
 
     def sigma_clip_centroid(self, sigma=3.5, plot=False):
         """
@@ -320,6 +396,8 @@ class CheopsLightCurve(object):
         ----------
         design_matrix : `~numpy.ndarray`
             Design matrix (concatenated column vectors of observables)
+        log_lams : `~numpy.ndarray`
+            Array for regularisation strength
 
         Returns
         -------
@@ -333,7 +411,7 @@ class CheopsLightCurve(object):
                       self.flux[~self.mask],
                       self.fluxerr[~self.mask], log_lams)
 
-        return RegressionResult(design_matrix, b, c)
+        return RegressionResult(design_matrix, b, c, self.name_detrend)
 
     def plot_phase_curve(self, r, params, t_fine, transit_fine, sinusoid_fine,
                          t0_offset=0, n_regressors=2, bins=15):
