@@ -1,4 +1,5 @@
 import numpy as np
+from astropy.table import Table
 
 
 def linreg(X, flux, error, log_lams=None):
@@ -64,6 +65,6 @@ class RegressionResult(object):
 
         self.best_fit = self.X @ betas
 
-        self.beta_dict = {}
-        for i in range(len(betas)):
-            self.beta_dict[name_list[i]] = betas[i]
+        self.beta_tab = Table()
+        self.beta_tab['vector'], self.beta_tab['beta'], self.beta_tab['err'] =\
+            name_list, betas, np.sqrt(np.diagonal(cov))
