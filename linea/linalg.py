@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def linreg(X, flux, error, log_lams):
+def linreg(X, flux, error, log_lams=None):
     r"""
     Least squares linear regression.
 
@@ -44,7 +44,10 @@ def linreg(X, flux, error, log_lams):
         :math:`\sigma_{\hat{\beta}}^2`
     """
     inv_N = np.linalg.inv(np.diag(error)**2)
-    XT_invN_X = np.linalg.inv(X.T @ inv_N @ X + np.diag(10**log_lams))
+    if log_lams is None:
+        XT_invN_X = np.linalg.inv(X.T @ inv_N @ X)
+    else:
+        XT_invN_X = np.linalg.inv(X.T @ inv_N @ X + np.diag(10**log_lams))
     betas = XT_invN_X @ X.T @ inv_N @ flux
     cov = XT_invN_X
     return betas, cov

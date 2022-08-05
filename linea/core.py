@@ -9,7 +9,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.stats import SigmaClip, mad_std
 
-from .linalg import linreg, RegressionResult
+from linalg import linreg, RegressionResult
 
 __all__ = ['CheopsLightCurve', 'JointLightCurve']
 
@@ -271,7 +271,7 @@ class CheopsLightCurve(object):
             plt.xlabel('BJD')
             plt.ylabel('Flux')
 
-    def regress(self, design_matrix, log_lams):
+    def regress(self, design_matrix, log_lams=None):
         r"""
         Regress the design matrix against the fluxes.
 
