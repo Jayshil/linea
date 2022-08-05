@@ -35,7 +35,10 @@ attrs = [  # These vectors are from DRP
 ] + [  # These vectors are from PIPE
     "u0",
     "u1",
-    "u2"
+    "u2",
+    "xc",
+    "yc",
+    "bg"
 ]
 
 
@@ -185,6 +188,82 @@ class CheopsLightCurve(object):
             ]).T
 
         return X[~self.mask]
+    
+    def design_matrix_all(self, harmonics, norm=True):
+        """
+        Generate a design matrix that contains all possible detrending vectors
+
+        Parameters:
+        -----------
+        harmonics : int
+            Number of roll angle sinusoidal harmonics to be included
+        norm : bool
+            Normalize the column vectors within the design matrix such that they
+            have mean=zero and range=unity.
+
+        Returns
+        -------
+        X : `~numpy.ndarray`
+            Design matrix (concatenated column vectors of observables)
+        names : list
+            List of names of each column
+        """
+        X = np.ones(len(self.bjd_time))
+        self.name_detrend = ['ones']
+        # Roll angle harmonics
+        for i in range(harmonics):
+            if norm:
+                sin1 = normalize(np.sin((i+1)*np.radians(self.roll_angle)))
+                cos1 = normalize(np.cos((i+1)*np.radians(self.roll_angle)))
+            else:
+                sin1 = np.sin((i+1)*np.radians(self.roll_angle))
+                cos1 = np.cos((i+1)*np.radians(self.roll_angle))
+            X = np.vstack([X, sin1])
+            X = np.vstack([X, cos1])
+            self.name_detrend.append('sin' + str(i+1))
+            self.name_detrend.append('cos' + str(i+1))
+        # Centroid positions, background
+        try:
+            xc, yc, bg = self.centroid_x, self.centroid_y, self.background
+        except:
+            xc, yc, bg = self.xc, self.yc, self.bg
+        if norm:
+            X = np.vstack([
+                X, normalize(xc), normalize(yc), normalize(xc**2), normalize(yc**2), normalize(xc*yc), normalize(bg)
+            ])
+        else:
+            X = np.vstack([
+                X, xc, yc, xc**2, yc**2, xc*yc, bg
+            ])
+        self.name_detrend = self.name_detrend + ['xc', 'yc', 'x2', 'y2', 'xy', 'bg']
+        # Contamination, smear for DRP; u1, u2 for PIPE
+        try:
+            if norm:
+                X = np.vstack([X, normalize(self.conta_lc), normalize(self.smearing_lc)])
+            else:
+                X = np.vstack([X, self.conta_lc, self.smearing_lc])
+            self.name_detrend = self.name_detrend + ['contamination', 'smearing']
+        except:
+            pass
+        try:
+            if norm:
+                X = np.vstack([X, normalize(self.u1), normalize(self.u2)])
+            else:
+                X = np.vstack([X, self.u1, self.u2])
+            self.name_detrend = self.name_detrend + ['u1', 'u2']
+        except:
+            pass
+        X = X.T
+        # Other extra basis vectors
+        if self.extra_basis_vectors is not None:
+            X = np.vstack([
+                X.T, self.extra_basis_vectors,
+            ]).T
+            for i in range(len(self.extra_basis_vectors[:,0])):
+                self.name_detrend.append('extra' + str(i+1))
+
+        return X[~self.mask]
+        
 
     def sigma_clip_centroid(self, sigma=3.5, plot=False):
         """
@@ -234,7 +313,7 @@ class CheopsLightCurve(object):
         maxiters : float or None
             Number of sigma-clipping iterations. Default is None, which repeats
             until there are no outliers left.
-        plot : float
+        plot : bool
             Plot the accepted fluxes (in black) and the rejected fluxes (in red)
         """
         sc = SigmaClip(sigma_upper=sigma_upper, sigma_lower=sigma_lower,
@@ -246,8 +325,70 @@ class CheopsLightCurve(object):
             plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
             plt.xlabel('BJD')
             plt.ylabel('Flux')
+    
+    def high_bg_clip(self, bgmin=300, plot=False):
+        """
+        To mask the points with high background (mainly used for PIPE data)
 
-    def regress(self, design_matrix):
+        Parameters
+        ----------
+        bgmin : float
+            Minimum threshold value of background, all points that have background
+            above this value would be masked.
+        plot : bool
+            Plot the accepted fluxes (in black) and the rejected fluxes (in red)
+        """
+        msk = (self.bg > bgmin)
+        self.mask |= msk
+        
+        if plot:
+            plt.plot(self.bjd_time[self.mask], self.flux[self.mask], 'r.')
+            plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
+            plt.xlabel('BJD')
+            plt.ylabel('Flux')
+    
+    def mask_planetary_signal(self, pl, plot=False):
+        """
+        To mask the points with planetary signal (transit/eclipse)
+
+        Parameters
+        ----------
+        pl : Planet object
+        plot : bool
+            Plot the accepted fluxes (in black) and the rejected fluxes (in red)
+        """
+        # Planetary parameters
+        per1 = pl.per
+        ar1 = pl.a
+        inc1 = np.deg2rad(pl.inc)
+        rprs1 = pl.rp
+        t01 = pl.t0             # Transit time
+        t02 = pl.t0 + (per1/2)  # Eclipse time
+        bb = ar1*np.cos(inc1)
+        # Computing transit/eclipse duration
+        ab = per1/np.pi
+        cd = (1+rprs1)**2 - bb**2
+        ef = 1 - ((bb/ar1)**2)
+        br1 = (1/ar1)*(np.sqrt(cd/ef))
+        t14 = ab*np.arcsin(br1)
+        # Computing phase
+        phs1 = ((self.bjd_time - t01)/per1) % 1        # Courtesy of `juliet`
+        ii1 = np.where(phs1>0.5)[0]
+        phs1[ii1] = phs1[ii1] - 1.
+        phs2 = ((self.bjd_time - t02)/per1) % 1
+        ii2 = np.where(phs2>0.5)[0]
+        phs2[ii2] = phs2[ii2] - 1.
+        # And producing the mask
+        msk2 = (np.abs(phs1*per1)>=t14)&(np.abs(phs2*per1)>=t14)
+        self.mask |= ~msk2
+        if plot:
+            plt.plot(self.bjd_time[self.mask], self.flux[self.mask], 'r.')
+            plt.plot(self.bjd_time[~self.mask], self.flux[~self.mask], 'k.')
+            plt.xlabel('BJD')
+            plt.ylabel('Flux')
+
+
+    def regress(self, design_matrix, log_lams=None):
         r"""
         Regress the design matrix against the fluxes.
 
@@ -255,6 +396,8 @@ class CheopsLightCurve(object):
         ----------
         design_matrix : `~numpy.ndarray`
             Design matrix (concatenated column vectors of observables)
+        log_lams : `~numpy.ndarray`
+            Array for regularisation strength
 
         Returns
         -------
@@ -266,9 +409,9 @@ class CheopsLightCurve(object):
         """
         b, c = linreg(design_matrix,
                       self.flux[~self.mask],
-                      self.fluxerr[~self.mask])
+                      self.fluxerr[~self.mask], log_lams)
 
-        return RegressionResult(design_matrix, b, c)
+        return RegressionResult(design_matrix, b, c, self.name_detrend)
 
     def plot_phase_curve(self, r, params, t_fine, transit_fine, sinusoid_fine,
                          t0_offset=0, n_regressors=2, bins=15):
