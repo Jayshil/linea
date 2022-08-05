@@ -57,9 +57,13 @@ class RegressionResult(object):
     """
     Result from a linear regression
     """
-    def __init__(self, design_matrix, betas, cov):
+    def __init__(self, design_matrix, betas, cov, name_list):
         self.X = design_matrix
         self.betas = betas
         self.cov = cov
 
         self.best_fit = self.X @ betas
+
+        self.beta_dict = {}
+        for i in range(len(betas)):
+            self.beta_dict[name_list[i]] = betas[i]
