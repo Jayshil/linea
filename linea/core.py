@@ -9,7 +9,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.stats import SigmaClip, mad_std
 
-from linalg import linreg, RegressionResult
+from .linalg import linreg, RegressionResult
 
 __all__ = ['CheopsLightCurve', 'JointLightCurve']
 
