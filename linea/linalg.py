@@ -58,13 +58,9 @@ class RegressionResult(object):
     """
     Result from a linear regression
     """
-    def __init__(self, design_matrix, betas, cov, name_list):
+    def __init__(self, design_matrix, betas, cov):
         self.X = design_matrix
         self.betas = betas
         self.cov = cov
 
         self.best_fit = self.X @ betas
-
-        self.beta_tab = Table()
-        self.beta_tab['vector'], self.beta_tab['beta'], self.beta_tab['err'] =\
-            name_list, betas, np.sqrt(np.diagonal(cov))

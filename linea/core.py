@@ -9,7 +9,7 @@ from astropy.io import fits
 from astropy.time import Time
 from astropy.stats import SigmaClip, mad_std
 
-from .linalg import linreg, RegressionResult
+from linalg import linreg, RegressionResult
 
 __all__ = ['CheopsLightCurve', 'JointLightCurve']
 
@@ -209,7 +209,7 @@ class CheopsLightCurve(object):
             List of names of each column
         """
         X = np.ones(len(self.bjd_time))
-        self.name_detrend = ['ones']
+        name_detrend = ['ones']
         # Roll angle harmonics
         for i in range(harmonics):
             if norm:
@@ -220,8 +220,8 @@ class CheopsLightCurve(object):
                 cos1 = np.cos((i+1)*np.radians(self.roll_angle))
             X = np.vstack([X, sin1])
             X = np.vstack([X, cos1])
-            self.name_detrend.append('sin' + str(i+1))
-            self.name_detrend.append('cos' + str(i+1))
+            name_detrend.append('sin' + str(i+1))
+            name_detrend.append('cos' + str(i+1))
         # Centroid positions, background
         try:
             xc, yc, bg = self.centroid_x, self.centroid_y, self.background
@@ -235,14 +235,14 @@ class CheopsLightCurve(object):
             X = np.vstack([
                 X, xc, yc, xc**2, yc**2, xc*yc, bg
             ])
-        self.name_detrend = self.name_detrend + ['xc', 'yc', 'x2', 'y2', 'xy', 'bg']
+        name_detrend = name_detrend + ['xc', 'yc', 'x2', 'y2', 'xy', 'bg']
         # Contamination, smear for DRP; u1, u2 for PIPE
         try:
             if norm:
                 X = np.vstack([X, normalize(self.conta_lc), normalize(self.smearing_lc)])
             else:
                 X = np.vstack([X, self.conta_lc, self.smearing_lc])
-            self.name_detrend = self.name_detrend + ['contamination', 'smearing']
+            name_detrend = name_detrend + ['contamination', 'smearing']
         except:
             pass
         try:
@@ -250,7 +250,7 @@ class CheopsLightCurve(object):
                 X = np.vstack([X, normalize(self.u1), normalize(self.u2)])
             else:
                 X = np.vstack([X, self.u1, self.u2])
-            self.name_detrend = self.name_detrend + ['u1', 'u2']
+            name_detrend = name_detrend + ['u1', 'u2']
         except:
             pass
         X = X.T
@@ -260,9 +260,9 @@ class CheopsLightCurve(object):
                 X.T, self.extra_basis_vectors,
             ]).T
             for i in range(len(self.extra_basis_vectors[:,0])):
-                self.name_detrend.append('extra' + str(i+1))
+                name_detrend.append('extra' + str(i+1))
 
-        return X[~self.mask]
+        return X[~self.mask], name_detrend
         
 
     def sigma_clip_centroid(self, sigma=3.5, plot=False):
@@ -411,7 +411,7 @@ class CheopsLightCurve(object):
                       self.flux[~self.mask],
                       self.fluxerr[~self.mask], log_lams)
 
-        return RegressionResult(design_matrix, b, c, self.name_detrend)
+        return RegressionResult(design_matrix, b, c)
 
     def plot_phase_curve(self, r, params, t_fine, transit_fine, sinusoid_fine,
                          t0_offset=0, n_regressors=2, bins=15):
